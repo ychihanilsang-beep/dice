@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>주사위 한 판 - 피그 게임</title>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#13303a; --panel:#1b4250; --ink:#f6efdd; --muted:#9db8bf;
+  --gold:#f2b632; --coral:#e8634f; --die:#f6efdd; --pip:#1a2b30;
+}
+:root:not([data-theme="light"]){color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif;min-height:100vh;display:flex;justify-content:center}
+main{width:100%;max-width:520px;padding:20px 16px 32px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:1.9rem;margin:0;font-weight:400}
+.sub{color:var(--muted);margin:4px 0 0;font-size:.95rem;line-height:1.5}
+.scores{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pl{background:var(--panel);border-radius:14px;padding:12px 14px;border:3px solid transparent;transition:border-color .2s}
+.pl.on{border-color:var(--gold)}
+.pl .n{color:var(--muted);font-size:.95rem}
+.pl .s{font-size:2.4rem;line-height:1.1}
+.bar{height:6px;background:#0e242c;border-radius:3px;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .4s}
+.stage{background:var(--panel);border-radius:20px;padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.die{width:112px;height:112px;background:var(--die);border-radius:22px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:14px;box-shadow:0 6px 0 #c9bfa3}
+.die span{width:22px;height:22px;border-radius:50%;background:var(--pip);place-self:center;visibility:hidden}
+.die span.on{visibility:visible}
+.die.one span.on{background:var(--coral)}
+.die.roll{animation:shake .5s}
+@keyframes shake{0%{transform:rotate(0)}20%{transform:rotate(-18deg) translateY(-10px)}40%{transform:rotate(16deg)}60%{transform:rotate(-12deg) translateY(-6px)}80%{transform:rotate(8deg)}100%{transform:rotate(0)}}
+.turn{font-size:1.15rem;text-align:center;min-height:1.6em}
+.turn b{color:var(--gold);font-weight:400;font-size:1.5rem}
+.btns{display:flex;gap:12px;width:100%}
+button{font:inherit;font-size:1.2rem;border:0;border-radius:14px;padding:14px 10px;cursor:pointer;flex:1;color:#1a2b30;background:var(--gold);box-shadow:0 4px 0 #b98a1a}
+button.alt{background:var(--ink);box-shadow:0 4px 0 #b9b19a}
+button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 #b98a1a}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.log{background:#0e242c;border-radius:14px;padding:12px 14px;height:120px;overflow-y:auto;font-size:.95rem;line-height:1.6;color:var(--muted)}
+.log p{margin:0}
+.rules summary{cursor:pointer;color:var(--muted)}
+.rules p{color:var(--muted);line-height:1.6;margin:8px 0 0;font-size:.95rem}
+@media (prefers-reduced-motion:reduce){.die.roll{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>주사위 한 판</h1>
+    <p class="sub">굴려서 점수를 쌓고, 1이 나오기 전에 멈추세요. 먼저 50점을 넘으면 승리!</p>
+  </header>
+
+  <section class="scores" aria-label="점수">
+    <div class="pl on" id="p0"><div class="n">나</div><div class="s" id="s0">0</div><div class="bar"><i id="b0"></i></div></div>
+    <div class="pl" id="p1"><div class="n">컴퓨터</div><div class="s" id="s1">0</div><div class="bar"><i id="b1"></i></div></div>
+  </section>
+
+  <section class="stage">
+    <div class="die" id="die" role="img" aria-label="주사위"></div>
+    <div class="turn" id="turn" aria-live="polite"></div>
+    <div class="btns">
+      <button id="roll">굴리기</button>
+      <button id="hold" class="alt">멈추고 저장</button>
+    </div>
+  </section>
+
+  <div class="log" id="log" aria-live="polite"></div>
+  <button id="again" class="alt" style="display:none">새 게임</button>
+
+  <details class="rules">
+    <summary>게임 규칙</summary>
+    <p>내 차례에 주사위를 원하는 만큼 굴려 나온 눈을 더합니다. 멈추고 저장하면 그 점수가 내 점수가 됩니다. 하지만 1이 나오면 이번 차례에 쌓은 점수가 모두 사라지고 차례가 넘어갑니다.</p>
+  </details>
+</main>
+
+<script>
+(function(){
+  var TARGET = 50;
+  var PIPS = {1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+  var $ = function(id){return document.getElementById(id)};
+  var die = $('die'), rollBtn = $('roll'), holdBtn = $('hold'), turnEl = $('turn'), logEl = $('log'), againBtn = $('again');
+  var scores, cur, pot, busy, over;
+
+  for (var i = 0; i < 9; i++) die.appendChild(document.createElement('span'));
+
+  function showDie(n){
+    var spans = die.children;
+    for (var i = 0; i < 9; i++) spans[i].className = PIPS[n].indexOf(i) > -1 ? 'on' : '';
+    die.className = 'die' + (n === 1 ? ' one' : '');
+    die.setAttribute('aria-label', '주사위 ' + n);
+  }
+  function log(t){
+    var p = document.createElement('p'); p.textContent = t;
+    logEl.appendChild(p); logEl.scrollTop = logEl.scrollHeight;
+  }
+  function name(p){ return p === 0 ? '나' : '컴퓨터'; }
+  function render(){
+    for (var i = 0; i < 2; i++){
+      $('s'+i).textContent = scores[i];
+      $('b'+i).style.width = Math.min(100, scores[i] / TARGET * 100) + '%';
+      $('p'+i).className = 'pl' + (cur === i && !over ? ' on' : '');
+    }
+    turnEl.innerHTML = over ? '' : name(cur) + '의 차례 · 이번 차례 점수 <b>' + pot + '</b>';
+    var mine = cur === 0 && !busy && !over;
+    rollBtn.disabled = !mine;
+    holdBtn.disabled = !mine || pot === 0;
+  }
+  function delay(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  async function doRoll(){
+    busy = true; render();
+    var n = Math.floor(Math.random() * 6) + 1;
+    die.classList.remove('roll'); void die.offsetWidth; die.classList.add('roll');
+    await delay(500);
+    showDie(n);
+    if (n === 1){
+      log(name(cur) + ': 1이 나왔어요. ' + pot + '점이 사라집니다.');
+      pot = 0; await delay(700); switchTurn(); return true;
+    }
+    pot += n; log(name(cur) + ': ' + n + ' (이번 차례 ' + pot + '점)');
+    busy = false; render(); return false;
+  }
+  function hold(){
+    scores[cur] += pot;
+    log(name(cur) + ': ' + pot + '점 저장 → 합계 ' + scores[cur] + '점');
+    pot = 0;
+    if (scores[cur] >= TARGET){ finish(); return; }
+    switchTurn();
+  }
+  function switchTurn(){
+    pot = 0; cur = 1 - cur; busy = false; render();
+    if (cur === 1) computerTurn();
+  }
+  async function computerTurn(){
+    busy = true; render();
+    await delay(800);
+    while (!over && cur === 1){
+      var lost = await doRoll();
+      if (lost) return;
+      busy = true; render();
+      await delay(700);
+      if (pot >= 16 || scores[1] + pot >= TARGET){ hold(); return; }
+    }
+  }
+  function finish(){
+    over = true; busy = true; render();
+    var win = cur === 0;
+    turnEl.innerHTML = '<b>' + (win ? '승리! 🎉' : '컴퓨터가 이겼어요') + '</b>';
+    log(win ? '축하해요, 내가 이겼어요!' : '아쉽지만 다음 판에 다시 도전해 보세요.');
+    rollBtn.disabled = holdBtn.disabled = true;
+    againBtn.style.display = 'block';
+  }
+  function start(){
+    scores = [0, 0]; cur = 0; pot = 0; busy = false; over = false;
+    logEl.innerHTML = ''; againBtn.style.display = 'none';
+    showDie(1); die.className = 'die'; log('게임 시작! 먼저 굴려 보세요.'); render();
+  }
+
+  rollBtn.onclick = function(){ if (!busy && !over && cur === 0) doRoll(); };
+  holdBtn.onclick = function(){ if (!busy && !over && cur === 0 && pot > 0) hold(); };
+  againBtn.onclick = start;
+  start();
+})();
+</script>
+</body>
+</html>
